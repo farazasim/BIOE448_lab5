@@ -1,56 +1,88 @@
-const int trigPin = 11;
-const int echoPin = 12;
-const int RedLEDPin = 4;
-const int GreenLEDPin = 5;
+#include <ArduinoBLE.h>
+BLEService newService("180A");
+
+BLEByteCharacteristic readChar("2A58", BLERead);
+BLEByteCharacteristic writeChar("2A57", BLEWrite);
+
+long previousMillis = 0;
+
+const int trigPin = 8;
+const int echoPin = 10;
 long duration;
 int distanceCm, distanceInch;
-long range = 3;
-// range = 3 in 
-
-#include <ArduinoBLE.h>
-BLEService newService("180A"); // creating the service
-BLEByteCharacteristic readChar("2A57", BLERead);
-BLEByteCharacteristic writeChar("2A58", BLEWrite);
 
 void setup() {
-  // put your setup code here, to run once:
-pinMode(trigPin, OUTPUT);
-pinMode(echoPin, INPUT);
-pinMode(RedLEDPin, OUTPUT);
-pinMode(GreenLEDPin, OUTPUT);
-Serial.begin(9600);
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  Serial.begin(9600);
 
-while(!Serial);
-if (!BLE.begin()){
-Serial.println("Waiting for ArduinoBLE");
-while(1);
-}
+  while (!Serial)
+    ;
+  if (!BLE.begin()) {
+    Serial.println("Waiting for ArduinoBLE");
+    while (1)
+      ;
+  }
 
+  BLE.setDeviceName("Faraz and Maneesh");
+  BLE.setLocalName("Faraz and Maneesh");
+
+
+  BLE.setAdvertisedService(newService);
+  newService.addCharacteristic(readChar);
+  newService.addCharacteristic(writeChar);
+  BLE.addService(newService);
+
+  readChar.writeValue(0);
+  writeChar.writeValue(0);
+
+  BLE.advertise();
+  Serial.println("Bluetooth device active");
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-digitalWrite(trigPin, LOW);
-delayMicroseconds(2);
-digitalWrite(trigPin, HIGH);
-delayMicroseconds(10);
-digitalWrite(trigPin, LOW);
-duration = pulseIn(echoPin, HIGH);
 
-distanceCm = duration * 0.0172;
-distanceInch = duration * 0.00675;
-Serial.print("Distance: ");
-Serial.print(distanceCm);
-Serial.print(" cm/");
-Serial.print(distanceInch);
-Serial.println(" in");
-delay(1000);
+  BLEDevice central = BLE.central();  // wait for a BLE central
 
-if (distanceInch < range) {
-  digitalWrite(GreenLEDPin, HIGH);
-  digitalWrite(RedLEDPin, LOW);
-} else {
-  digitalWrite(GreenLEDPin, LOW);
-  digitalWrite(RedLEDPin, HIGH);
-}
+  if (central) {  // if a central is connected to the peripheral
+    Serial.print("Connected to central: ");
+
+    Serial.println(central.address());  // print the central's BT address
+
+    digitalWrite(LED_BUILTIN, HIGH);  // turn on the LED to indicate the connection
+
+    while (central.connected()) {  // while the central is connected:
+      long currentMillis = millis();
+
+      if (currentMillis - previousMillis >= 200) {
+        previousMillis = currentMillis;
+
+        if (writeChar.written()) {
+          if (writeChar.value()) {
+
+
+            digitalWrite(trigPin, LOW);
+            delayMicroseconds(2);
+            digitalWrite(trigPin, HIGH);
+            delayMicroseconds(10);
+            digitalWrite(trigPin, LOW);
+
+            duration = pulseIn(echoPin, HIGH);
+            distanceCm = duration * 0.034 / 2;
+
+            Serial.print("Distance: ");
+            Serial.print(distanceCm);
+            Serial.println(" cm");
+
+            delay(10);
+
+            readChar.writeValue(distanceCm);
+            Serial.println("Distance printed to peripheral");
+          }
+        }
+      }
+    }
+    Serial.print("Disconnected from central: ");
+    Serial.println(central.address());
+  }
 }
